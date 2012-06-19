@@ -44,12 +44,98 @@ struct proinfo
 }pro_info[PMAX];
 
 extern GtkListStore* process_store;
+GtkWidget* ptree_view;
+int selected_index;
+
+void killbutton_clicked(gpointer data)
+{
+	
+
+	GtkTreeSelection *selection;
+  	GtkTreeModel *model;
+  	GtkTreeIter iter;
+  	gchar *pid;
+  	pid_t pid_num;
+
+  	selection = gtk_tree_view_get_selection(GTK_TREE_VIEW(ptree_view));//获得当前选择的项
+  	if (gtk_tree_selection_get_selected(selection, &model, &iter)) {
+		gtk_tree_model_get (model, &iter, PID_COLUMN, &pid, -1);//在树的相应列中获得该进程的PID
+  		pid_num = atoi (pid);//字符串转换成长整数
+	    
+	    	if(kill (pid_num, SIGTERM) == -1 ) {//根据PID结束该进程
+			//gchar *title = "错误";
+			//gchar *content = "Termination Failed,Check UID";
+			//show_dialog (title, content);//结束进程失败信息输出
+			printf("oh no!");
+			
+		}
+	    	pro_fill();
+  	}
+}
+
+void tree_selected(GtkTreeSelection* selection, gpointer data)
+{
+	GtkTreeIter iter;
+	GtkTreeModel* model;
+	int index;
+	
+	if(gtk_tree_selection_get_selected(selection, &model, &iter))
+	{
+		gtk_tree_model_get(model, &iter, INDEX_COLUMN, &index, -1);
+		//printf("jia %d\n", index);
+		selected_index = index;
+		
+	}
+}
+
+void set_select_as_before()
+{
+
+	//printf("zhen %d\n", selected_index);
+	GtkTreeSelection* select;
+	GtkTreePath* path;
+	select = gtk_tree_view_get_selection(GTK_TREE_VIEW(ptree_view));
+	//path = gtk_tree_path_new_from_indices(important_index, -1);
+	//gtk_tree_selection_select_path(select, path );
+	//path = gtk_tree_path_new_from_indices(important_index+1, -1);
+	//gtk_tree_selection_select_path(select, path);
+	//gtk_tree_view_set_cursor( GTK_TREE_VIEW(ptree_view), path, NULL, FALSE ); 
+	
+	GtkTreeIter iter;
+	GtkTreeModel* model;
+	int judgeit = selected_index;
+	gint i;
+	int index;
+	for(i = 0; i < 200; i++)
+	{
+		path = gtk_tree_path_new_from_indices(i, -1);
+		gtk_tree_selection_select_path(select, path);
+		if(gtk_tree_selection_get_selected(select, &model, &iter))
+		{
+			gtk_tree_model_get(model, &iter, INDEX_COLUMN, &index, -1);
+			if(index == judgeit)
+			{
+				//printf("final %d\n", index);
+				break;
+				
+			}
+				
+				
+			
+		}
+	}
+	
+	
+}
 
 int USER2,NICE2,SYSTEM2,IDLE2,IOWAIT2,IRQ2,SOFTIRQ2;
 long f;
 
 
 float fcpu,fmem; 
+
+
+
 
 gint pro_fill()
 {
@@ -141,7 +227,16 @@ gint pro_fill()
 				proinfo[i] = strtok(NULL, delim);
 			}
 				
-			//printf("%s\n", proinfo[0]);
+			//printf("size: %d\n", sizeof(proinfo[1]));
+			//printf("start: %c, edn: %c\n", *(proinfo[1]), *(proinfo[1] + sizeof(proinfo[1])));
+			
+			char maked[30];
+			memset(maked, '\0', sizeof(maked));
+			for(i = 1; proinfo[1][i] != ')'; i++)
+			{
+				maked[i - 1] = proinfo[1][i];
+			}
+			//printf("maked: %d, %s\n", sizeof(maked), maked);
 			
 			utime = atoi(proinfo[13]);
 			stime = atoi(proinfo[14]);
@@ -228,7 +323,7 @@ gint pro_fill()
 			
 			gtk_list_store_append (process_store, &iter);//增加到列表
 			gtk_list_store_set (process_store, &iter,
-					NAME_COLUMN,proinfo[1],
+					NAME_COLUMN,maked,
 					PID_COLUMN,proinfo[0],
 					STATUS_COLUMN,proinfo[2],
 					CPU_COLUMN,cpubuf,
@@ -245,12 +340,23 @@ gint pro_fill()
 	}
 	closedir(dir);
 	
-	printf("allcpu: %f\n", fcpu);
-	printf("allmem: %f\n", fmem);
+	//printf("allcpu: %f\n", fcpu);
+	//printf("allmem: %f\n", fmem);
 	
 	fcpu = 0;
 	fmem = 0;
 	//printf("allcpu: %ld\n",4*f);
+	
+	
+	
+	/*GtkTreeSelection* select;
+	select = gtk_tree_view_get_selection(GTK_TREE_VIEW(ptree_view));
+	GtkTreePath* path;
+	path = gtk_tree_path_new_from_indices(important_index, -1 );
+	gtk_tree_selection_select_path(select, path );
+	gtk_tree_view_set_cursor( GTK_TREE_VIEW(ptree_view), path, NULL, FALSE ); 
+	*/
+	set_select_as_before();
 	return 1;
 }
 
@@ -267,6 +373,7 @@ void pro_init()
 {
 	
 	gchar* cloumn_name[6] = {"进程", "Pid", "状态", "cpu占用", "内存占用", "序号"};
+	
 	GtkWidget* vbox = gtk_vbox_new(FALSE, 0);
 	//show
 	gtk_table_attach_defaults(GTK_TABLE(table2[1]), vbox, 0, 12, 0, 10);
@@ -274,14 +381,14 @@ void pro_init()
 
 	
 	GtkWidget* scroll_window = gtk_scrolled_window_new(NULL, NULL);//带滚动条的窗体
-	gtk_widget_set_size_request(scroll_window, 300, 300);
+	gtk_widget_set_size_request(scroll_window, 300, 430);
 	//show
 	gtk_box_pack_start(GTK_BOX(vbox), scroll_window, TRUE, TRUE, 0);//滚动窗口加入盒子中，可调整大小
 	
 	
 	process_store = gtk_list_store_new(NP_COLUMNS, G_TYPE_STRING, G_TYPE_STRING, G_TYPE_STRING, G_TYPE_STRING, G_TYPE_STRING, G_TYPE_INT);
 	
-	GtkWidget* ptree_view = gtk_tree_view_new_with_model(GTK_TREE_MODEL(process_store));
+	ptree_view = gtk_tree_view_new_with_model(GTK_TREE_MODEL(process_store));
 	
 	g_object_unref(G_OBJECT(process_store));
 	
@@ -291,8 +398,11 @@ void pro_init()
 	GtkTreeViewColumn* column;
 	for(i = 0; i < 6; i++)
 	{
+	
+		
 		renderer = gtk_cell_renderer_text_new();//用于显示文字
 		column = gtk_tree_view_column_new_with_attributes(cloumn_name[i], renderer, "text", i, NULL);//新建一列
+		gtk_tree_view_column_set_sort_column_id (column, i);
 		gtk_tree_view_append_column(GTK_TREE_VIEW(ptree_view), column);//将该列加到树中
 		
 	}
@@ -305,10 +415,10 @@ void pro_init()
 	gtk_widget_set_size_request(killbutton, 60, 30);
 	gtk_button_set_label(GTK_BUTTON(killbutton), "kill");
 	
-	//g_signal_connect (G_OBJECT (killbutton), "clicked", G_CALLBACK(killbutton_clicked), NULL);
+	g_signal_connect (G_OBJECT (killbutton), "clicked", G_CALLBACK(killbutton_clicked), NULL);
 	
 	//添加功能函数
-	gtk_table_attach_defaults(GTK_TABLE(table2[1]), killbutton, 2,4,10,11);
+	gtk_table_attach_defaults(GTK_TABLE(table2[1]), killbutton, 9,11,11,12);
 	
 	/*int timer;
 	gpointer data;
@@ -316,7 +426,22 @@ void pro_init()
 	*/
 	//pro_fill(process_store);
 	
+
+	GtkTreeSelection* select = gtk_tree_view_get_selection(GTK_TREE_VIEW(ptree_view));
+	gtk_tree_selection_set_mode(select, GTK_SELECTION_BROWSE);
+	g_signal_connect(G_OBJECT(select), "changed", G_CALLBACK(tree_selected), NULL); 
+	
+
+	
 }
+
+
+
+
+
+
+
+
 
 
 
