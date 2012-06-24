@@ -26,16 +26,11 @@ void CreateMenuTask(GtkWidget *MenuItem)
     GtkWidget *Menu;
    	Menu = gtk_menu_new();
    	GtkWidget *Exit;
-   	Exit = CreateMenuItem(Menu,"退出");
+   	Exit = CreateMenuItem(Menu,"关机选项");
     gtk_signal_connect(GTK_OBJECT(Exit),"activate",G_CALLBACK(gtk_main_quit),NULL);
     gtk_menu_item_set_submenu(GTK_MENU_ITEM(MenuItem),Menu);//菜单栏关联根菜单项
 }
 
-//进程内容填充
-void notebook_process_init()
-{
-	
-}
 
 int main(int argc, char *argv[])
 {

@@ -12,9 +12,12 @@
 #include <ctype.h>
 #include <dirent.h>
 #include <math.h>
+#include <unistd.h>
+	
+
 #include "simple_info.h"
 
-
+#define __NR_get_page_fault 347
 #define size 7
 #define Nsize 3
 static GtkWidget* widget;
@@ -22,6 +25,8 @@ extern GtkWidget *table2[Nsize];
 int seconds;
 extern GtkWidget* time_label;
 int cpuPoints[100], memPoints[100], lackPoints[100];
+
+
 
 float draw_mem, draw_cpu, draw_lack;
 gint get_time()
@@ -100,10 +105,10 @@ void get_cpuinfo2(GString* string)
 	}
 	
 	
-	g_string_append (string, "版本号       :");
+	g_string_append (string, "版本号         :");
     g_string_append (string, os_info[2]);
     g_string_append_c (string, '\n');
-    g_string_append (string, "Gcc 版本    :");
+    g_string_append (string, "Gcc 版本       :");
   	g_string_append (string, os_info[6]);
     g_string_append_c (string, '\n'); 	
 }
@@ -261,7 +266,7 @@ gint get_mem_rate()
 	
 	float memrate = 100*(MemTotal - MemFree - Buffers - Cached)/(float)MemTotal;
 	
-	printf("%f\n", memrate);
+	//printf("%f\n", memrate);
 	draw_mem = memrate;
 	
 	char meminfo[15] = "mem： ";
@@ -298,31 +303,32 @@ gint get_process_num(void){
 
 void info_init()
 {
-	GtkWidget* vbox = gtk_vbox_new(FALSE, 0);
+	//GtkWidget* vbox = gtk_vbox_new(FALSE, 0);
 	//show
-	gtk_table_attach_defaults(GTK_TABLE(table2[2]), vbox, 0,12,0,12);
-	GtkWidget* frame0 = gtk_frame_new("CPU : ");
+	//gtk_table_attach_defaults(GTK_TABLE(table2[2]), vbox, 0,12,0,12);
+	//GtkWidget* frame0 = gtk_frame_new("CPU : ");
 	//show
-	gtk_box_pack_start(GTK_BOX(vbox), frame0, TRUE, TRUE, 10);
+	//gtk_box_pack_start(GTK_BOX(vbox), frame0, TRUE, TRUE, 10);
 	
-	GString* info;
-	info = g_string_new("");
-	get_cpuinfo1(info);
+	GString* info1, *info2;
+	info1 = g_string_new("");
+	get_cpuinfo1(info1);
+	info2 = g_string_new("");
+	get_cpuinfo2(info2);
+	g_string_append(info1, info2->str);
 	
-	GtkWidget *info_label = gtk_label_new(info->str);
+	GtkWidget *info_label = gtk_label_new(info1->str);
 	//
-	gtk_container_add(GTK_CONTAINER(frame0), info_label);
+	//gtk_container_add(GTK_CONTAINER(frame0), info_label);
 	
-	frame0 = gtk_frame_new("OS : ");
+	gtk_table_attach_defaults(GTK_TABLE(table2[2]), info_label, 0,12,0,12);
+	
+	//info = g_string_new("");
+	//get_cpuinfo2(info);
+	//info_label = gtk_label_new(info->str);
+	//gtk_table_attach_defaults(GTK_TABLE(table2[2]), info_label, 0,7,7,12);
 	//
-	gtk_box_pack_start(GTK_BOX(vbox), frame0, TRUE, TRUE, 10);
-	
-	info = g_string_new("");
-	get_cpuinfo2(info);
-	info_label = gtk_label_new(info->str);
-	
-	//
-	gtk_container_add(GTK_CONTAINER(frame0), info_label);
+	//gtk_container_add(GTK_CONTAINER(frame0), info_label);
 	
 }
 int a = 0, b = 200;
@@ -479,7 +485,7 @@ void drawlines_init()
         
        cpuPoints[i] = (rand() % 30 + 50);  
        memPoints[i] = (rand() % 30 + 50);
-       lackPoints[i] = (rand() % 30 + 300);
+       lackPoints[i] = (rand() % 30 + 50);
     }  
    
     //  gtk_timeout_add(100, (GtkFunction) drawGraph, NULL);  */
@@ -524,11 +530,17 @@ void drawlines_init()
             cpu_configure_event), NULL);  
                */
 }
+
+int PAGEFAULT;
      
 gint lines_refresh()
 {
 
-	
+	int page_fault = syscall(__NR_get_page_fault);
+	int value = page_fault - PAGEFAULT;
+	PAGEFAULT = page_fault;
+	draw_lack = (float)(100*value/15000);
+	//printf("lack %f\n", draw_lack);
 	 /*gdk_draw_rectangle(cpu_graph ,
 
               cpu_draw_area->style->white_gc ,
@@ -560,12 +572,15 @@ gint lines_refresh()
 			cpu_draw_area->allocation.width, cpu_draw_area->allocation.height);
 	gdk_draw_rectangle(mem_graph, mem_draw_area->style->white_gc, TRUE,0,0,
 			mem_draw_area->allocation.width, mem_draw_area->allocation.height);
+	gdk_draw_rectangle(lack_graph, lack_draw_area->style->white_gc, TRUE,0,0,
+			lack_draw_area->allocation.width, lack_draw_area->allocation.height);
 	width = cpu_draw_area->allocation.width;
 	height = cpu_draw_area->allocation.height;
 	
 	
-	curPoint = (int) ((draw_cpu/100) * (double) height)*2 + 10;
+	curPoint = (int) ((draw_cpu/100) * (double) height) + 10;
 	curPoint1 = (int)((draw_mem/100) * (double) height);
+	curPoint2 = (int)((draw_lack/100) * (double) height);
 	
 	int i;
 	for (i = 0; i < 99; i++)
@@ -577,6 +592,7 @@ gint lines_refresh()
 	}
 	cpuPoints[99] = height - curPoint;
 	memPoints[99] = height - curPoint1;
+	lackPoints[99] = height - curPoint2;
 	
 	step = width / 99;
 	GdkGC *gc = gdk_gc_new(GDK_DRAWABLE(cpu_graph));
@@ -599,10 +615,13 @@ gint lines_refresh()
 		(i - 1) * step, cpuPoints[i - 1]); /* 第二个点坐标 */
 		gdk_draw_line(GDK_DRAWABLE(mem_graph), mem_draw_area->style->black_gc, i*step, memPoints[i],
 		(i-1)*step, memPoints[i-1]);
+		gdk_draw_line(GDK_DRAWABLE(lack_graph), lack_draw_area->style->black_gc, i*step, lackPoints[i],
+		(i-1)*step, lackPoints[i-1]);
 	}
 
 	gtk_widget_queue_draw(cpu_draw_area);
 	gtk_widget_queue_draw(mem_draw_area);
+	gtk_widget_queue_draw(lack_draw_area);
 	
 	return TRUE;
 
